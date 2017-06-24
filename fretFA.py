@@ -121,6 +121,8 @@ class Experiment(object) :
         from skimage import io, util
         import numpy as np
         import matplotlib.pyplot as plt
+        from sklearn.linear_model import LinearRegression
+
 
         if control == 'no_acceptor_control' :
             channel = 0
@@ -150,6 +152,14 @@ class Experiment(object) :
         plt.show()
 
 
+        LR_clf = LinearRegression()
+        LR_clf.fit(X = np.array([x[0] for x in results]).reshape(-1,1),
+                   y = np.array([y[1] for y in results]))
+
+        return LR_clf.coef_[0], LR_clf.intercept_
+
+
+
 
 
 
@@ -157,5 +167,5 @@ class Experiment(object) :
 if __name__ == '__main__' :
 
     test = Experiment()
-    test.donor_bt_rate = test.calculate_bleedthrough(control = 'no_acceptor_control', bins = 2**3)
-    test.acceptor_bt_rate = test.calculate_bleedthrough(control = 'no_donor_control', bins = 2**3)
+    test.donor_bt_coef, test.donor_bt_intercept = test.calculate_bleedthrough(control = 'no_acceptor_control', bins = 2**3)
+    test.acceptor_bt_coef, test.acceptor_bt_intercept = test.calculate_bleedthrough(control = 'no_donor_control', bins = 2**3)

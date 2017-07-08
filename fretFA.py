@@ -119,6 +119,123 @@ class Experiment(object) :
             self.samples_filename_list.append(keep_valid_image_names(sample_path))
         return None
 
+    def background_adjustments_calc(self) :
+        """
+        Calculates the average background pixel intensity from n random fields
+        per each image in the no_cell_path directory.
+
+        Input
+        |   * n - number of fields to assess for background pixel intensity
+
+        Returns instance variable
+        |   * self.mean_channel_background - 3-value list of the average pixel
+        |       value in the background (no cell images).
+        """
+        channel_background_list = []
+        for f in self.no_cell_filenames :
+            fname = os.path.join(self.no_cell_path, f)
+            img = io.imread(fname)
+
+            channel_background_list.append(np.mean(np.mean(img, 0),0))
+
+        self.mean_channel_background = np.mean(np.array(channel_background_list),0)
+        return None
+
+    def remove_maxouts(self, img) :
+        """
+        Zeros out any pixels at the maximum pixel value (16-bit = 2**16 - 1  )
+
+        Inputs
+        |   * img
+
+        Returns
+        |   * adjusted img array
+        """
+        adj_img = img.copy().astype(float)
+        MAX = (2**16) - 1
+        adj_img[ img == MAX] = 0
+        return adj_img
+
+    def subtract_background(self, img) :
+        """
+        Subtracts the mean background pixel values calculated in
+        `self.background_adjustments_calc`
+
+        Inputs
+        |   * img
+
+        Returns
+        |   * adjusted img array
+        """
+        assert hasattr(self, 'mean_channel_background'), '`self.background_adjustments_calc` has not been run yet.  No background values exist for this experiment yet.'
+        adj_img = img.copy().astype(float)
+        for c in range(3) :
+            adj_img[:,:,c] -= self.mean_channel_background[c]
+        return adj_img
+
+    def threshold_filter(self, img, threshold = 0.05) :
+        """
+        Sets pixel values that do not exceed a threshold arg to zero.
+
+        Inputs
+        |   * img
+        |   * threshold - (DEFAULT = 0.05) float between 0,1
+
+        Returns
+        |   * adjusted img array
+        """
+        MAX_bit = (2**16)-1
+        assert not np.any(img == MAX_bit), 'Maxout pixels not removed.  Run `self.remove_maxouts`.'
+
+        adj_img = img.copy().astype(float)
+        max_pv = np.max(np.max(adj_img,0),0)
+        th = max_pv.astype(float)*threshold
+
+        for c in range(3):
+            adj_img[:,:,c][adj_img[:,:,c] < th[c]] = 0
+
+        return adj_img
+
+    def cFRET(self, img):
+        """
+        Given an input image, calculates the cFRET value for each pixel.  The
+        cFRET is defined as the FRET channel value, less the FRET expected given
+        the donor channel bleedthrough given the donor channel pixel intensity,
+        less the FRET expected given the acceptor channel bleedthrough given the
+        acceptor channel pixel intensity.
+
+        cFRET = FRET - dbt(I_donor) - abt(I_acceptor),
+        where FRET is the adjusted pixel intensity for the FRET channel,
+        dbt and abt are the spectral bleedthrough functions and I_donor,
+        I_acceptor are the adjusted intensity values for the donor and acceptor
+        channels.
+
+        Inputs
+        |   * img
+
+        Returns
+        |   * corrected FRET array (m,n)
+        """
+        assert hasattr(self, 'mean_channel_background'), "Run `self.background_adjustments_calc` fn."
+        assert hasattr(self, 'dbt'), "Run `self.define_bt` function."
+        assert hasattr(self, 'abt'), "Run `self.define_bt` function."
+
+        # background adjustments
+        ph_img = self.remove_maxouts(img)
+        ph_img = self.subtract_background(ph_img)
+        ph_img = self.threshold_filter(ph_img)
+
+        # split channels
+        fret = ph_img[:,:,2].astype(float)
+        donor = ph_img[:,:,0].astype(float)
+        acceptor = ph_img[:,:,1].astype(float)
+
+        adj_donor = (donor*self.dbt[0]) - self.dbt[1]
+        adj_acceptor = (acceptor*self.abt[0]) - self.abt[1]
+
+        cFRET = fret - adj_donor - adj_acceptor
+
+        return cFRET
 
 
 
@@ -173,6 +290,20 @@ class Experiment(object) :
                    y = np.array([y[1] for y in results]))
 
         return LR_clf.coef_[0], LR_clf.intercept_
+
+    def define_bt(self, bins = 16, show_graphs = False) :
+        """
+        Wrapping function that combines `self.calculate_bleedthrough` calls to
+        both control channels, storing returns in instance variables in the
+        format of [coefficient, y_intercept].
+        """
+        self.dbt = self.calculate_bleedthrough(control = 'no_acceptor_control', bins = bins, show_graphs = show_graphs)
+        self.abt = self.calculate_bleedthrough(control = 'no_donor_control', bins = bins, show_graphs = show_graphs)
+        return None
+
+
+    def high_pass_filter(self):
+        pass
 
 
 if __name__ == '__main__' :

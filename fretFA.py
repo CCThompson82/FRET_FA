@@ -1,15 +1,21 @@
 """
 
 """
-# dependencies
+# builtins
 import os
+
+
+# 3rd party Dependencies
+from skimage import io, util
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
 
 def request_paths() :
     """
     Queries user to input the path directories containing relavent images
     for FRET analysis
     """
-    import numpy as np
     print("="*80)
     print("Current working directory: {}".format(os.getcwd()))
     print("-"*80)
@@ -68,7 +74,7 @@ def request_paths() :
                 if (len(dirs) == 0) & (len(files) > 0) :
                     sample_path_list.append(root)
             print('-'*80)
-
+    print( no_acceptor_path, no_donor_path, no_cell_path, sample_path_list)
     return no_acceptor_path, no_donor_path, no_cell_path, sample_path_list
 
 
@@ -88,10 +94,16 @@ def check_data() :
 
 class Experiment(object) :
 
-    def __init__(self) :
+    def __init__(self, paths_list) :
+        """
+        Input
+        |   * paths_list - the return of request_paths fn.
+
+        Return
+        |   * self
+        """
 
         # paths to data
-        paths_list = request_paths()
         self.no_acceptor_path = paths_list[0]
         self.no_donor_path = paths_list[1]
         self.no_cell_path = paths_list[2]
@@ -105,24 +117,27 @@ class Experiment(object) :
         self.samples_filename_list = []
         for sample_path in self.samples_path_list :
             self.samples_filename_list.append(keep_valid_image_names(sample_path))
+        return None
 
 
 
 
-    def calculate_bleedthrough(self, control, bins) :
+    def calculate_bleedthrough(self, control, bins, show_graphs = False) :
         """
+        Function that calculates the FRET bleedthrough in control situations
+        where no FRET should occur.
 
+        Inputs
+        |   * control - which control sample to calculate
+        |   * bins - size of kernels for pooling step
+
+        Returns
+        |   * (slope, intercept) of the linear regression model fit to the
+        |       processed control sample data.
         """
 
         # assertions
         assert control in ['no_acceptor_control', 'no_donor_control'], 'control parameter is not valid (`no_acceptor_control` or `no_donor_control` are valid options)'
-
-        # Dependencies
-        from skimage import io, util
-        import numpy as np
-        import matplotlib.pyplot as plt
-        from sklearn.linear_model import LinearRegression
-
 
         if control == 'no_acceptor_control' :
             channel = 0
@@ -146,10 +161,11 @@ class Experiment(object) :
             for m in range(control_blocks.shape[1]) :
                 for n in range(control_blocks.shape[0]) :
                     results.append( [np.mean(control_blocks[m,n]), np.mean(fret_blocks[m,n])])
-
-        plt.scatter([x[0] for x in results],
-                    [y[1] for y in results])
-        plt.show()
+        if show_graphs :
+            plt.scatter([x[0] for x in results],
+                        [y[1] for y in results])
+            # TODO : label axes
+            plt.show()
 
 
         LR_clf = LinearRegression()
@@ -159,13 +175,5 @@ class Experiment(object) :
         return LR_clf.coef_[0], LR_clf.intercept_
 
 
-
-
-
-
-
 if __name__ == '__main__' :
-
-    test = Experiment()
-    test.donor_bt_coef, test.donor_bt_intercept = test.calculate_bleedthrough(control = 'no_acceptor_control', bins = 2**3)
-    test.acceptor_bt_coef, test.acceptor_bt_intercept = test.calculate_bleedthrough(control = 'no_donor_control', bins = 2**3)
+    path_list = request_paths()

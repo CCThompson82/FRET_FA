@@ -6,6 +6,8 @@ sys.path.append(ROOT_DIR)
 
 import unittest
 import numpy as np
+from skimage import io
+import matplotlib.pyplot as plt
 
 from fretFA import Experiment
 
@@ -104,7 +106,20 @@ class TestFretFA(unittest.TestCase) :
         self.assertGreater(np.sum(test_img), np.sum(ret_img))
 
     def show_image(self) :
-        pass
+
+        test_experiment.background_adjustments_calc()
+        test_experiment.define_bt()
+
+        key = 'Experiment_test/Uninfected/Vinculin-TL'
+        test_img = io.imread(os.path.join(key, test_experiment.samples_dict[key][0]))
+
+        ret_img = test_experiment.cFRET(test_img)
+        f_img = test_experiment.boxfilter(ret_img)
+
+        fig, axarr = plt.subplots(1,2, figsize = (10,5))
+        axarr[0].imshow(ret_img)
+        axarr[1].imshow(test_experiment.threshold_filter_gs(f_img))
+        plt.show()
 
 
 

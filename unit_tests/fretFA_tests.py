@@ -31,6 +31,16 @@ class TestFretFA(unittest.TestCase) :
         """
         self.assertEqual(test_experiment.no_acceptor_path, no_acceptor_path)
 
+    def test_dict_setup(self) :
+        """
+        Checks dictionary that is initiated from Experiment_test data is
+        correct.
+        """
+        key = 'Experiment_test/Uninfected/Vinculin-TL'
+        value_0 = '2016-03-16 FRET.lif - Uninfected 8h vinculin TL 1 low venus.tif'
+        self.assertTrue(test_experiment.samples_dict[key][0] == value_0 )
+
+
     def test_background_adj_calc(self):
         test_experiment.background_adjustments_calc()
         self.assertAlmostEqual(test_experiment.mean_channel_background[0], 4.4231016)
@@ -92,6 +102,9 @@ class TestFretFA(unittest.TestCase) :
 
         ret_img = test_experiment.cFRET(test_img)
         self.assertGreater(np.sum(test_img), np.sum(ret_img))
+
+    def show_image(self) :
+        pass
 
 
 

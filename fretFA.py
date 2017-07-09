@@ -114,9 +114,9 @@ class Experiment(object) :
         self.no_donor_filenames = keep_valid_image_names(self.no_donor_path)
         self.no_cell_filenames = keep_valid_image_names(self.no_cell_path)
 
-        self.samples_filename_list = []
+        self.samples_dict = {}
         for sample_path in self.samples_path_list :
-            self.samples_filename_list.append(keep_valid_image_names(sample_path))
+            self.samples_dict[sample_path] = keep_valid_image_names(sample_path)
         return None
 
     def background_adjustments_calc(self) :
@@ -300,10 +300,6 @@ class Experiment(object) :
         self.dbt = self.calculate_bleedthrough(control = 'no_acceptor_control', bins = bins, show_graphs = show_graphs)
         self.abt = self.calculate_bleedthrough(control = 'no_donor_control', bins = bins, show_graphs = show_graphs)
         return None
-
-
-    def high_pass_filter(self):
-        pass
 
 
 if __name__ == '__main__' :

@@ -10,6 +10,7 @@ from skimage import io, util
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
+from scipy.ndimage.filters import convolve
 
 def request_paths() :
     """
@@ -196,6 +197,30 @@ class Experiment(object) :
 
         return adj_img
 
+
+    def threshold_filter_gs(self, arr, threshold = 0.05) :
+        """
+        Sets pixel values that do not exceed a threshold arg to zero in an
+        m x n array.
+
+        Inputs
+        |   * arr
+        |   * threshold - (DEFAULT = 0.05) float between 0,1
+
+        Returns
+        |   * adjusted img array
+        """
+        MAX_bit = (2**16)-1
+        #assert not np.any(img == MAX_bit), 'Maxout pixels not removed.  Run `self.remove_maxouts`.'
+
+        adj_arr = arr.copy().astype(float)
+        max_pv = np.max(adj_arr,0)
+        th = max_pv.astype(float)*threshold
+
+        adj_arr[adj_arr < th] = 0
+
+        return adj_arr
+
     def cFRET(self, img):
         """
         Given an input image, calculates the cFRET value for each pixel.  The
@@ -301,6 +326,15 @@ class Experiment(object) :
         self.abt = self.calculate_bleedthrough(control = 'no_donor_control', bins = bins, show_graphs = show_graphs)
         return None
 
+    def boxfilter(self, img_arr, b = 12) :
+        """
+        Function to convolve a local filter over an image.
+        """
+        print(np.mean(img_arr))
+        inter_arr = convolve(img_arr, weights = np.ones([b,b]), mode='reflect', cval=0.0) / (b**2)
+        print(np.mean(inter_arr))
+
+        return img_arr - inter_arr
 
 if __name__ == '__main__' :
     path_list = request_paths()

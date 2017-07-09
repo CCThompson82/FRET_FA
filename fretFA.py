@@ -233,7 +233,7 @@ class Experiment(object) :
         adj_donor = (donor*self.dbt[0]) - self.dbt[1]
         adj_acceptor = (acceptor*self.abt[0]) - self.abt[1]
 
-        cFRET = fret - adj_donor - adj_acceptor
+        cFRET = np.clip(fret - adj_donor - adj_acceptor, a_min = 0, a_max = None)
 
         return cFRET
 

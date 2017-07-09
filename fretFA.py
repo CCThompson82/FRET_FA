@@ -89,9 +89,48 @@ def keep_valid_image_names(path) :
             _ = f_list.pop(idx)
     return f_list
 
-def check_data() :
-    """Check validity of all data images and directories"""
-    pass
+
+def get_neighbor_ix(ix, m) :
+    """
+    Utility to retrieve the index positions of surrounding pixels of
+    ix from a 1D list
+    """
+
+    i = ix // m
+    j = ix % j
+
+    ret_list = []
+    for r in range(-1,2,1) :
+        for c in range(-1,2,1) :
+            if ((r == 0) and (c == 0)) :
+                pass
+            else :
+                ret_list.append( ((r+i)*m) + (j+c) )
+    return ret_list
+
+def check_neighbor_id(n_ix, id_dict) :
+    """
+    Utility to check if neibhbor has been assigned an id.
+    """
+    for fa_id in id_dict :
+        if n_ix in id_dict[fa_id] :
+            return True
+    return False
+
+def get_FA_seg_id(n_ix, id_dict) :
+    """
+    Utility to search FA_ids until the neighbor ix is found.
+    Returns the FA id.
+    """
+    for fa_id in id_dict :
+        if n_ix in id_dict[fa_id] :
+            return fa_id
+
+
+
+
+
+
 
 class Experiment(object) :
 
@@ -335,6 +374,54 @@ class Experiment(object) :
         print(np.mean(inter_arr))
 
         return img_arr - inter_arr
+
+    def waterfall_segmentation(self, arr, min_merger_size = 9):
+        """
+        Function to id each FA segment.
+        """
+        m, n = arr.shape
+        assert m == n, 'Function not set up for non-square arrays'
+
+        #reshape array
+        flat_arr = arr.flatten(order='C')
+        ROW_ix = 2
+        COLUMN_ix = 3
+        assert arr[ROW_ix,COLUMN_ix] == flat_arr[(ROW_ix*m) + COLUMN_ix]
+
+        # rank pixel values in flat_arr
+        rank_ix = np.argsort(flat_arr)[::-1]
+
+        id_dict = {}
+        NEXT_SEGMENT_ID = 1
+
+        while len(rank_ix) > 0 :
+
+            ix = ank_ix.pop(0)
+            pix_ix = get_neighbor_ix(ix, m)
+
+            ix_has_id_list = []
+            for neighbor in pix_ix :
+                ix_has_id_list.append(check_neighbor_id(neighbor, id_dict))
+
+            if np.sum(ix_has_id_list) == 0 :
+                # no neighbors are labeled, assign a new FA id to this pixel.
+                id_dict[NEXT_SEGMENT_ID] = [ix]
+                NEXT_SEGMENT_ID += 1
+
+            elif np.sum(ix_has_id_list) == 1 :
+                # assign this pixel to the neighbor's id
+                ## which neighbor is labeled?
+                for neighbor in pix_ix :
+                    if check_neighbor_id(neighbor, id_dict) :
+                        ## retrive the FA segment id
+                        segment_id = get_FA_seg_id(neighbor, id_dict)
+                        ## assign the pixel under the FA segment id
+                        id_dict[segment_id].append(ix)
+
+            elif np.sum(ix_has_id_list) > 2 :
+                #### pick up here next time.  
+
+
 
 if __name__ == '__main__' :
     path_list = request_paths()

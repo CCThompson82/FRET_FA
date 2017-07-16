@@ -365,7 +365,7 @@ class Experiment(object) :
         self.abt = self.calculate_bleedthrough(control = 'no_donor_control', bins = bins, show_graphs = show_graphs)
         return None
 
-    def boxfilter(self, img_arr, b = 12) :
+    def boxfilter(self, img_arr, b = 10) :
         """
         Function to convolve a local filter over an image.
         """
@@ -375,7 +375,7 @@ class Experiment(object) :
 
     def waterfall_segmentation(self, arr,
                                      I_threshold = 0.5,
-                                     merger_threshold = 9,
+                                     merger_threshold = 15,
                                      min_pix_area=5,
                                      verbose = True):
         """
@@ -523,6 +523,29 @@ class Experiment(object) :
         return master_dict
 
 
+    def generate_mask(self, master_dict, arr):
+        """
+        Generates a mask from a segmentation dictionary.
+        """
+
+        mask_arr = np.zeros_like(arr)
+
+        for fa_id in master_dict:
+            for flat_ix in master_dict[fa_id] :
+                mask_arr[get_coords(arr, flat_ix )] = fa_id
+
+        return mask_arr
+
+
+def get_coords(arr, flat_ix) :
+    """
+    Utility to retrive pixel cordinates from a flattened index id.
+    """
+    m, n = arr.shape
+    assert m == n , "Not set up for rectangle images"
+    i = flat_ix // m
+    j = flat_ix % m
+    return i, j
 
 if __name__ == '__main__' :
     path_list = request_paths()

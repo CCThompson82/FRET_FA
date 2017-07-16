@@ -131,10 +131,44 @@ class TestFretFA(unittest.TestCase) :
         key = 'Experiment_test/Uninfected/Vinculin-TL'
         test_img = io.imread(os.path.join(key, test_experiment.samples_dict[key][0]))
 
-        ret_img = test_experiment.cFRET(test_img)
-        f_img = test_experiment.boxfilter(ret_img)
+        #ret_img = test_experiment.cFRET(test_img)
+        f_img = test_experiment.boxfilter(test_img[:,:,1])
 
-        self.assertEqual(len(test_experiment.waterfall_segmentation(f_img, verbose = False)), 150)
+        self.assertEqual(
+            len(
+                test_experiment.waterfall_segmentation(
+                    f_img,
+                    I_threshold = 0.5,
+                    merger_threshold = 12,
+                    min_pix_area=8,
+                    verbose = False)
+               ), 95)
+
+    def show_mask(self) :
+        test_experiment.background_adjustments_calc()
+        test_experiment.define_bt()
+
+        key = 'Experiment_test/Uninfected/Vinculin-TL'
+        test_img = io.imread(os.path.join(key, test_experiment.samples_dict[key][0]))
+
+        #ret_img = test_experiment.cFRET(test_img)
+        f_img = test_experiment.boxfilter(test_img[:,:,1])
+        master_dict = test_experiment.waterfall_segmentation(
+            f_img,
+            I_threshold = 0.5,
+            merger_threshold = 12,
+            min_pix_area=8,
+            verbose = True)
+
+        mask_img = test_experiment.generate_mask(master_dict, f_img)
+
+        fig, axarr = plt.subplots(2,2, figsize = (10,10))
+        axarr[0,0].imshow(test_img[:,:,1])
+        axarr[0,1].imshow(test_img[:,:,0])
+        axarr[1,0].imshow(f_img)
+        axarr[1,1].imshow(mask_img, cmap = 'nipy_spectral')
+        plt.show()
+
 
 
 

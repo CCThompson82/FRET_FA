@@ -97,7 +97,7 @@ def get_neighbor_ix(ix, m) :
     """
 
     i = ix // m
-    j = ix % j
+    j = ix % m
 
     ret_list = []
     for r in range(-1,2,1) :
@@ -369,34 +369,54 @@ class Experiment(object) :
         """
         Function to convolve a local filter over an image.
         """
-        print(np.mean(img_arr))
-        inter_arr = convolve(img_arr, weights = np.ones([b,b]), mode='reflect', cval=0.0) / (b**2)
-        print(np.mean(inter_arr))
 
+        inter_arr = convolve(img_arr, weights = np.ones([b,b]), mode='reflect', cval=0.0) / (b**2)
         return img_arr - inter_arr
 
-    def waterfall_segmentation(self, arr, min_merger_size = 9):
+    def waterfall_segmentation(self, arr,
+                                     I_threshold = 0.5,
+                                     merger_threshold = 9,
+                                     min_pix_area=5,
+                                     verbose = True):
         """
         Function to id each FA segment.
         """
         m, n = arr.shape
         assert m == n, 'Function not set up for non-square arrays'
+        if verbose :
+            print("Waterfall segmentation of FA initiated...")
+
+        arr = self.threshold_filter_gs(arr, threshold = I_threshold)
 
         #reshape array
         flat_arr = arr.flatten(order='C')
+
+        # assert indexing done correctly
         ROW_ix = 2
         COLUMN_ix = 3
         assert arr[ROW_ix,COLUMN_ix] == flat_arr[(ROW_ix*m) + COLUMN_ix]
 
         # rank pixel values in flat_arr
-        rank_ix = np.argsort(flat_arr)[::-1]
+        rank_ix = np.argsort(flat_arr)[::-1].tolist()
+
+        # shorten list to non-zero pixels
+        ## find the index in the rank_ix where values in flat_arr become zero.
+        for i, ix in enumerate(rank_ix) :
+            if flat_arr[ix] == 0.0 :
+                cut_at_ix = i
+                break
+        ## cut the rank_ix
+        rank_ix = rank_ix[:cut_at_ix]
 
         id_dict = {}
         NEXT_SEGMENT_ID = 1
 
         while len(rank_ix) > 0 :
+            if verbose :
+                if (len(rank_ix) % 500) == 0:
+                    print('{} pixels left to assign'.format(len(rank_ix)))
 
-            ix = ank_ix.pop(0)
+            ix = rank_ix.pop(0)
             pix_ix = get_neighbor_ix(ix, m)
 
             ix_has_id_list = []
@@ -418,8 +438,89 @@ class Experiment(object) :
                         ## assign the pixel under the FA segment id
                         id_dict[segment_id].append(ix)
 
-            elif np.sum(ix_has_id_list) > 2 :
-                #### pick up here next time.  
+            elif np.sum(ix_has_id_list) > 1 :
+                ## which neighbors are labeled with an FA id?
+                seg_FA_id_list = []
+                for neighbor in pix_ix :
+                    if check_neighbor_id(neighbor, id_dict) :
+                        ## retrive the FA segment id
+                        seg_FA_id_list.append(get_FA_seg_id(neighbor, id_dict))
+                ## current pixel size of each FA id segment
+                merge_list, keep_list = [], []
+                for fa_id in set(seg_FA_id_list):
+                    count = len(id_dict[fa_id])
+                    ## determine if fa_id is big enough to be its own segment
+                    if count < merger_threshold :
+                        merge_list.append(fa_id)
+                    else :
+                        keep_list.append(fa_id)
+                # NOTE : There are 3 results at this point:
+                #   1.) length of merge_list is >0 and lenth of keep_list is <= 1.
+                #   2.) length of merge_list is 0 and length of keep_list is >1.
+                #   3.) length of merge_list is > 0 and the length of keep_list
+                #       is >1.
+                #   If option 1, then merge all fa_id pixel lists into a new
+                #       fa_id, and assign the bridge pixel to this id.
+                #   If option 2, assign the bridge pixel to the smaller(?) of
+                #    the two segments.
+                #   If option 3, (rare) merge the fa_id from the merge_list into
+                #       the smaller(?)
+
+                if (len(merge_list) > 0) and (len(keep_list)<=1) :
+                    try :
+                        new_seg_list = id_dict.pop(keep_list[0])
+                    except :
+                        new_seg_list = []
+                    for fa_id in merge_list :
+                        try :
+                            new_seg_list.extend(id_dict.pop(fa_id))
+                        except :
+                            print(merge_list)
+                            print(keep_list)
+                            print(id_dict)
+                            return None
+
+                    id_dict[NEXT_SEGMENT_ID] = new_seg_list
+                    ## add bridge pixel to the new fa_id
+                    id_dict[NEXT_SEGMENT_ID].append(ix)
+                    NEXT_SEGMENT_ID += 1
+
+                elif (len(merge_list)==0) and (len(keep_list) >=1) :
+                    tmp_count_dict = {}
+                    for fa_id in keep_list :
+                        tmp_count_dict.update({fa_id : len(id_dict[fa_id])})
+                    smallest_id = min(tmp_count_dict, key=tmp_count_dict.get)
+                    ## add bridge pixel to the smalled segment
+                    id_dict[smallest_id].append(ix)
+
+                elif (len(merge_list)>0) and (len(keep_list) >1) :
+                    tmp_count_dict = {}
+                    for fa_id in keep_list :
+                        tmp_count_dict.update({fa_id : len(id_dict[fa_id])})
+                    smallest_id = min(tmp_count_dict, key=tmp_count_dict.get)
+
+                    new_seg_list = id_dict.pop(smallest_id)
+                    for fa_id in merge_list :
+                        new_seg_list.extend(id_dict.pop(fa_id))
+                    id_dict[NEXT_SEGMENT_ID] = new_seg_list
+                    ## add bridge pixel to the new fa_id
+                    id_dict[NEXT_SEGMENT_ID].append(ix)
+                    NEXT_SEGMENT_ID += 1
+                else :
+                    print("Error in merging process for pixel id {}".format(ix))
+                    print(merge_list)
+                    print(keep_list)
+                    print(id_dict)
+                    return None
+        # filter for minimum pixel size
+        master_dict = {}
+        for x in id_dict :
+            if len(id_dict[x]) > min_pix_area :
+                master_dict[x] = id_dict[x]
+        if verbose :
+            print("\n{} focal adhesions identified by waterfall segmentation.".format(len(master_dict)))
+
+        return master_dict
 
 
 

@@ -121,6 +121,21 @@ class TestFretFA(unittest.TestCase) :
         axarr[1].imshow(test_experiment.threshold_filter_gs(f_img))
         plt.show()
 
+    def test_waterfall(self):
+        """
+        Test the waterfall segmentation function.
+        """
+        test_experiment.background_adjustments_calc()
+        test_experiment.define_bt()
+
+        key = 'Experiment_test/Uninfected/Vinculin-TL'
+        test_img = io.imread(os.path.join(key, test_experiment.samples_dict[key][0]))
+
+        ret_img = test_experiment.cFRET(test_img)
+        f_img = test_experiment.boxfilter(ret_img)
+
+        self.assertEqual(len(test_experiment.waterfall_segmentation(f_img, verbose = False)), 150)
+
 
 
 if __name__ == '__main__':

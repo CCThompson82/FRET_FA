@@ -37,7 +37,8 @@ class Experiment(object) :
                  b=10,
                  min_intensity_percentile = 0.05,
                  merger_threshold = 15,
-                 min_segment_size = 5) :
+                 min_segment_size = 5,
+                 FA_segmentation_threshold = 750.0) :
         """
         Input
         |   * paths_list - the return of request_paths fn.
@@ -66,8 +67,13 @@ class Experiment(object) :
         self.th = min_intensity_percentile
         self.merger_th = merger_threshold
         self.min_segment_size = min_segment_size
-        self.fret_df = self.initiate_fret_df()
+        self.FA_seg_th = FA_segmentation_threshold
         self.exp_parameter_url = self.write_experiment_parameters_json()
+
+        # run necessary functions
+        self.background_adjustments_calc()
+        self.define_bt()
+        self.fret_df = self.initiate_fret_df()
 
 
 
@@ -163,7 +169,7 @@ class Experiment(object) :
         """
         fret_df = pd.DataFrame([],
                                     columns = ['img_url',
-                                                'exp_name:',
+                                                'exp_name',
                                                 'exp_parameter_url',
                                                 'FA_ID',
                                                 'area',
@@ -180,7 +186,8 @@ class Experiment(object) :
                     'kernel_size': self.b,
                     'min_intensity_pc_threshold': self.th,
                     'merger_threshold': self.merger_th,
-                    'min_segment_size': self.min_segment_size}
+                    'min_segment_size': self.min_segment_size,
+                    'FA_segmentation_threshold': self.FA_seg_th}
 
         with open(json_path, 'w') as fp :
             json.dump(par_dict, fp)
@@ -281,9 +288,7 @@ class SampleImage(object):
         f_arr = img_arr - inter_arr
         return f_arr
 
-    def waterfall_segmentation(self, arr,
-                                     I_threshold = 750.0,
-                                     verbose = True):
+    def waterfall_segmentation(self, arr, verbose = True):
         """
         Function to id each FA segment.
 
@@ -302,6 +307,7 @@ class SampleImage(object):
         """
         merger_threshold = self.experiment.merger_th
         min_pix_area= self.experiment.min_segment_size
+        I_threshold = self.experiment.FA_seg_th
 
         m, n = arr.shape
         assert m == n, 'Function not set up for non-square arrays'
@@ -440,7 +446,7 @@ class SampleImage(object):
             print("\n{} focal adhesions identified by waterfall segmentation.".format(len(master_dict)))
         self.master_dict = master_dict
 
-    def generate_mask(self, f_arr):
+    def generate_mask(self, f_arr, show=False):
         """
         Generates a mask from a segmentation dictionary for visualization
         purposes.
@@ -451,8 +457,10 @@ class SampleImage(object):
             for flat_ix in self.master_dict[fa_id] :
                 mask_arr[get_coords(f_arr, flat_ix )] = fa_id
         self.mask_arr = mask_arr
-        plt.imshow(self.mask_arr, cmap = 'nipy_spectral')
-        plt.show()
+        if show :
+            plt.imshow(self.mask_arr, cmap = 'nipy_spectral')
+            plt.set_title(self.sample_path)
+            plt.show()
 
     def cFRET(self):
         """

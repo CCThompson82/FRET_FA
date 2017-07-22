@@ -8,133 +8,35 @@ import os
 # 3rd party Dependencies
 from skimage import io, util
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from scipy.ndimage.filters import convolve
 
-def request_paths() :
-    """
-    Queries user to input the path directories containing relavent images
-    for FRET analysis
-    """
-    print("="*80)
-    print("Current working directory: {}".format(os.getcwd()))
-    print("-"*80)
-    data_root = input('path to experiment data?  ')
-    print("-"*80)
-    print('Setting up the control images')
-    print("-"*80)
-    for ix, folder in enumerate(os.listdir(data_root)) :
-        print("[{}]  {}".format(ix, folder))
-
-    no_acceptor_path = os.path.join(
-        data_root,
-        os.listdir(data_root)[int(
-            input(
-            "Please select the index number of the directory containing the 'no acceptor control' images:   "
-                 ))])
-
-    no_donor_path = os.path.join(
-        data_root,
-        os.listdir(data_root)[int(
-            input(
-            "Please select the index number of the directory containing the 'no donor control' images:   "
-                 ))])
-
-    no_cell_path = os.path.join(
-        data_root,
-        os.listdir(data_root)[int(
-            input(
-            "Please select the index number of the directory containing the 'no cell control' images :  "
-                 ))])
-
-    print('-'*80)
-    print("{} 'no_acceptor_control' (.tif) images".format(np.sum( [x.find('.tif') != -1 for x in os.listdir(no_acceptor_path)])))
-    print("{} 'no_donor_control' (.tif) images".format(np.sum( [x.find('.tif') != -1 for x in os.listdir(no_donor_path)])))
-    print("{} 'no_cell_control' (.tif) images".format(np.sum( [x.find('.tif') != -1 for x in os.listdir(no_cell_path)])))
-    print('-'*80)
-    print('Setting up the sample images')
-    print('-'*80)
-    for ix, folder in enumerate(os.listdir(data_root)) :
-        print("[{}]  {}".format(ix, folder))
-    print("[F]  <Finished selecting samples>")
-    print('-'*80)
-
-    sample_path_list = []
-    selection_loop = 'on'
-
-    while selection_loop == 'on' :
-        selection = input('Select an index containing (nested) sample images:  ').strip()
-        if selection == 'F' :
-            selection_loop = 'off'
-            print('='*80)
-        else :
-            sample_dir = os.path.join(data_root, os.listdir(data_root)[int(selection)])
-
-            for root, dirs, files in os.walk(sample_dir) :
-                if (len(dirs) == 0) & (len(files) > 0) :
-                    sample_path_list.append(root)
-            print('-'*80)
-    print( no_acceptor_path, no_donor_path, no_cell_path, sample_path_list)
-    return no_acceptor_path, no_donor_path, no_cell_path, sample_path_list
-
-
-def keep_valid_image_names(path) :
-    """
-    Cleaner function to drop non-image files from filename lists.
-    """
-    f_list = os.listdir(path)
-    for idx, f in enumerate(f_list) :
-        if f.find('.tif') == -1 :
-            _ = f_list.pop(idx)
-    return f_list
-
-
-def get_neighbor_ix(ix, m) :
-    """
-    Utility to retrieve the index positions of surrounding pixels of
-    ix from a 1D list
-    """
-
-    i = ix // m
-    j = ix % m
-
-    ret_list = []
-    for r in range(-1,2,1) :
-        for c in range(-1,2,1) :
-            if ((r == 0) and (c == 0)) :
-                pass
-            else :
-                ret_list.append( ((r+i)*m) + (j+c) )
-    return ret_list
-
-def check_neighbor_id(n_ix, id_dict) :
-    """
-    Utility to check if neibhbor has been assigned an id.
-    """
-    for fa_id in id_dict :
-        if n_ix in id_dict[fa_id] :
-            return True
-    return False
-
-def get_FA_seg_id(n_ix, id_dict) :
-    """
-    Utility to search FA_ids until the neighbor ix is found.
-    Returns the FA id.
-    """
-    for fa_id in id_dict :
-        if n_ix in id_dict[fa_id] :
-            return fa_id
-
-
-
-
+# local
+from utils import *
 
 
 
 class Experiment(object) :
+    """
+    Coordinates the events of the FRET focal adhesion analysis.
 
-    def __init__(self, paths_list) :
+    Attributes
+
+        mean_channel_background (arr): mean background intensity for channels
+            of a 3-panel FRET experiment.
+        fret_df (DataFrame): dataframe to record image and segment level
+            information.
+    """
+
+    def __init__(self,
+                 experiment_name,
+                 paths_list,
+                 b=10,
+                 min_intensity_percentile = 0.05,
+                 merger_threshold = 15,
+                 min_segment_size = 5) :
         """
         Input
         |   * paths_list - the return of request_paths fn.
@@ -144,6 +46,8 @@ class Experiment(object) :
         """
 
         # paths to data
+        self.experiment_name = experiment_name
+        self.data_path = paths_list[4]
         self.no_acceptor_path = paths_list[0]
         self.no_donor_path = paths_list[1]
         self.no_cell_path = paths_list[2]
@@ -157,7 +61,14 @@ class Experiment(object) :
         self.samples_dict = {}
         for sample_path in self.samples_path_list :
             self.samples_dict[sample_path] = keep_valid_image_names(sample_path)
-        return None
+        self.b = b
+        self.th = min_intensity_percentile
+        self.merger_th = merger_threshold
+        self.min_segment_size = min_segment_size
+        self.fret_df = self.initiate_fret_df()
+        self.exp_parameter_url = self.write_experiment_parameters_json()
+
+
 
     def background_adjustments_calc(self) :
         """
@@ -179,127 +90,6 @@ class Experiment(object) :
             channel_background_list.append(np.mean(np.mean(img, 0),0))
 
         self.mean_channel_background = np.mean(np.array(channel_background_list),0)
-        return None
-
-    def remove_maxouts(self, img) :
-        """
-        Zeros out any pixels at the maximum pixel value (16-bit = 2**16 - 1  )
-
-        Inputs
-        |   * img
-
-        Returns
-        |   * adjusted img array
-        """
-        adj_img = img.copy().astype(float)
-        MAX = (2**16) - 1
-        adj_img[ img == MAX] = 0
-        return adj_img
-
-    def subtract_background(self, img) :
-        """
-        Subtracts the mean background pixel values calculated in
-        `self.background_adjustments_calc`
-
-        Inputs
-        |   * img
-
-        Returns
-        |   * adjusted img array
-        """
-        assert hasattr(self, 'mean_channel_background'), '`self.background_adjustments_calc` has not been run yet.  No background values exist for this experiment yet.'
-        adj_img = img.copy().astype(float)
-        for c in range(3) :
-            adj_img[:,:,c] -= self.mean_channel_background[c]
-        return adj_img
-
-    def threshold_filter(self, img, threshold = 0.05) :
-        """
-        Sets pixel values that do not exceed a threshold arg to zero.
-
-        Inputs
-        |   * img
-        |   * threshold - (DEFAULT = 0.05) float between 0,1
-
-        Returns
-        |   * adjusted img array
-        """
-        MAX_bit = (2**16)-1
-        assert not np.any(img == MAX_bit), 'Maxout pixels not removed.  Run `self.remove_maxouts`.'
-
-        adj_img = img.copy().astype(float)
-        max_pv = np.max(np.max(adj_img,0),0)
-        th = max_pv.astype(float)*threshold
-
-        for c in range(3):
-            adj_img[:,:,c][adj_img[:,:,c] < th[c]] = 0
-
-        return adj_img
-
-
-    def threshold_filter_gs(self, arr, threshold = 0.05) :
-        """
-        Sets pixel values that do not exceed a threshold arg to zero in an
-        m x n array.
-
-        Inputs
-        |   * arr
-        |   * threshold - (DEFAULT = 0.05) float between 0,1
-
-        Returns
-        |   * adjusted img array
-        """
-        MAX_bit = (2**16)-1
-        #assert not np.any(img == MAX_bit), 'Maxout pixels not removed.  Run `self.remove_maxouts`.'
-
-        adj_arr = arr.copy().astype(float)
-        max_pv = np.max(adj_arr,0)
-        th = max_pv.astype(float)*threshold
-
-        adj_arr[adj_arr < th] = 0
-
-        return adj_arr
-
-    def cFRET(self, img):
-        """
-        Given an input image, calculates the cFRET value for each pixel.  The
-        cFRET is defined as the FRET channel value, less the FRET expected given
-        the donor channel bleedthrough given the donor channel pixel intensity,
-        less the FRET expected given the acceptor channel bleedthrough given the
-        acceptor channel pixel intensity.
-
-        cFRET = FRET - dbt(I_donor) - abt(I_acceptor),
-        where FRET is the adjusted pixel intensity for the FRET channel,
-        dbt and abt are the spectral bleedthrough functions and I_donor,
-        I_acceptor are the adjusted intensity values for the donor and acceptor
-        channels.
-
-        Inputs
-        |   * img
-
-        Returns
-        |   * corrected FRET array (m,n)
-        """
-        assert hasattr(self, 'mean_channel_background'), "Run `self.background_adjustments_calc` fn."
-        assert hasattr(self, 'dbt'), "Run `self.define_bt` function."
-        assert hasattr(self, 'abt'), "Run `self.define_bt` function."
-
-        # background adjustments
-        ph_img = self.remove_maxouts(img)
-        ph_img = self.subtract_background(ph_img)
-        ph_img = self.threshold_filter(ph_img)
-
-        # split channels
-        fret = ph_img[:,:,2].astype(float)
-        donor = ph_img[:,:,0].astype(float)
-        acceptor = ph_img[:,:,1].astype(float)
-
-        adj_donor = (donor*self.dbt[0]) - self.dbt[1]
-        adj_acceptor = (acceptor*self.abt[0]) - self.abt[1]
-
-        cFRET = np.clip(fret - adj_donor - adj_acceptor, a_min = 0, a_max = None)
-
-        return cFRET
 
 
 
@@ -363,30 +153,151 @@ class Experiment(object) :
         """
         self.dbt = self.calculate_bleedthrough(control = 'no_acceptor_control', bins = bins, show_graphs = show_graphs)
         self.abt = self.calculate_bleedthrough(control = 'no_donor_control', bins = bins, show_graphs = show_graphs)
-        return None
 
-    def boxfilter(self, img_arr, b = 10) :
+
+    def initiate_fret_df(self) :
+        """
+        Utility function to initiate the fret_df to which image summary data
+        will be added.
+        """
+        fret_df = pd.DataFrame([],
+                                    columns = ['img_url',
+                                                'exp_name:',
+                                                'exp_parameter_url',
+                                                'FA_ID',
+                                                'area',
+                                                'mean_cFRET'],
+                                    index = [])
+        return fret_df
+
+    def write_experiment_parameters_json(self):
+        """
+        Stores a json with the experiment parameters.
+        """
+        # TODO : actually write the json
+
+        return(os.path.join(self.data_path, str(self.experiment_name)+'.json'))
+
+
+
+class SampleImage(object):
+    """
+    A placeholder object for single image calculations within `Experiment`.
+
+    Attributes:
+        experiment (object): an instance of `Experiment`
+        sample_path (str): the full path and filename of instance image
+        img (arr): an (m*n*3) array of the image (rgb)
+        adj_img (arr): `SampleImage.img` with various adjustments
+        master_dict (dictionary): dictionary containing the focal adhesion
+            id keys with lists of pixel coordinates (flattened index).
+        mask_arr (arr): mask of focal adhesion segments
+        cFRET (arr): array containing the cFRET values for the image
+    """
+
+    def __init__(self, experiment, sample_path, filename) :
+        """
+        Initiates a SampleImage object.
+
+        Inputs:
+            experiment (object): an instance of `Experiment`
+            sample_path (str): path to sample image
+            filename (str): filename in the sample path dir
+        """
+        self.experiment = experiment
+        self.fname = os.path.join(sample_path, filename)
+        self.img = io.imread(self.fname)
+
+        self.adj_img = self.threshold_filter()
+
+        # segmentation
+        self.waterfall_segmentation(arr = self.boxfilter(self.adj_img[:,:,1]))
+        self.generate_mask(f_arr = self.adj_img[:,:,1])
+
+        # cFRET calcs
+        self.cFRET()
+        self.calculate_fret_stats()
+
+
+    def threshold_filter(self) :
+        """
+        Sets pixel values that do not exceed a threshold arg to zero.
+
+        Args:
+            threshold (float; DEFAULT = 0.5): percentile of lowest pixel values
+                to set at zero.
+        Returns:
+            adjusted_img (array): m*n*3 adjusted img array
+        """
+        adj_img = remove_maxouts(self.img)
+        adj_img = self.subtract_background()
+
+        max_pv = np.max(np.max(adj_img,0),0)
+        th = max_pv.astype(float)*self.experiment.th
+
+        for c in range(3):
+            adj_img[:,:,c][adj_img[:,:,c] < th[c]] = 0
+        self.adj_img = adj_img
+        return self.adj_img
+
+    def subtract_background(self) :
+        """
+        Subtracts the mean background pixel values calculated in
+        `Experiment.background_adjustments_calc`
+
+        Returns:
+            adj_img (arr): image array with background intensity subtracted.
+        """
+        assert hasattr(self.experiment, 'mean_channel_background'), "`self.background_adjustments_calc` has not been run yet.  No background values exist for this experiment yet."
+        adj_img = self.img.copy().astype(float)
+        for c in range(3) :
+            adj_img[:,:,c] -= self.experiment.mean_channel_background[c]
+        return adj_img
+
+    def boxfilter(self, img_arr) :
         """
         Function to convolve a local filter over an image.
-        """
 
+        Args:
+            arr (array): array for filter to be applied upon.  Typically the
+                'acceptor' channel of a FRET 3-panel image.
+            b (int): (DEFAULT = 10) the kernel size for convolution
+
+        Returns:
+            f_arr (array): filtered array.  Typically fed to the
+                `SampleImage.waterfall_segmentation` function.
+        """
+        b = self.experiment.b
         inter_arr = convolve(img_arr, weights = np.ones([b,b]), mode='reflect', cval=0.0) / (b**2)
-        return img_arr - inter_arr
+        f_arr = img_arr - inter_arr
+        return f_arr
 
     def waterfall_segmentation(self, arr,
-                                     I_threshold = 0.5,
-                                     merger_threshold = 15,
-                                     min_pix_area=5,
+                                     I_threshold = 750.0,
                                      verbose = True):
         """
         Function to id each FA segment.
+
+        Args:
+            arr (array): array for FA segmentation to be applied upon.
+                Typically the array returned from `SampleImage.boxfilter`.
+            I_threshold (float): minimum intensity to be considered for
+                inclusion into a segment.
+            merger_threshold (int): minimum number of pixels of a current
+                segment required to avoid being merged into a neighoring
+                segment when a collision occurs.
+            min_pix_area (int): minimum size after algorithm to be considered an
+                actual FA segment.
+            verbose (bool): show print statements
+
         """
+        merger_threshold = self.experiment.merger_th
+        min_pix_area= self.experiment.min_segment_size
+
         m, n = arr.shape
         assert m == n, 'Function not set up for non-square arrays'
         if verbose :
             print("Waterfall segmentation of FA initiated...")
-
-        arr = self.threshold_filter_gs(arr, threshold = I_threshold)
 
         #reshape array
         flat_arr = arr.flatten(order='C')
@@ -402,19 +313,18 @@ class Experiment(object) :
         # shorten list to non-zero pixels
         ## find the index in the rank_ix where values in flat_arr become zero.
         for i, ix in enumerate(rank_ix) :
-            if flat_arr[ix] == 0.0 :
+            if flat_arr[ix] <= I_threshold :
                 cut_at_ix = i
                 break
         ## cut the rank_ix
         rank_ix = rank_ix[:cut_at_ix]
+        print('{} pixels passed intensity cutoff of {}'.format(
+            len(rank_ix), I_threshold))
 
         id_dict = {}
         NEXT_SEGMENT_ID = 1
 
         while len(rank_ix) > 0 :
-            if verbose :
-                if (len(rank_ix) % 500) == 0:
-                    print('{} pixels left to assign'.format(len(rank_ix)))
 
             ix = rank_ix.pop(0)
             pix_ix = get_neighbor_ix(ix, m)
@@ -478,7 +388,7 @@ class Experiment(object) :
                             print(merge_list)
                             print(keep_list)
                             print(id_dict)
-                            return None
+                            return "Error!"
 
                     id_dict[NEXT_SEGMENT_ID] = new_seg_list
                     ## add bridge pixel to the new fa_id
@@ -511,7 +421,7 @@ class Experiment(object) :
                     print(merge_list)
                     print(keep_list)
                     print(id_dict)
-                    return None
+                    return "Error!"
         # filter for minimum pixel size
         master_dict = {}
         for x in id_dict :
@@ -519,33 +429,76 @@ class Experiment(object) :
                 master_dict[x] = id_dict[x]
         if verbose :
             print("\n{} focal adhesions identified by waterfall segmentation.".format(len(master_dict)))
+        self.master_dict = master_dict
 
-        return master_dict
-
-
-    def generate_mask(self, master_dict, arr):
+    def generate_mask(self, f_arr):
         """
-        Generates a mask from a segmentation dictionary.
+        Generates a mask from a segmentation dictionary for visualization
+        purposes.
         """
 
-        mask_arr = np.zeros_like(arr)
+        mask_arr = np.zeros_like(f_arr)
+        for fa_id in self.master_dict:
+            for flat_ix in self.master_dict[fa_id] :
+                mask_arr[get_coords(f_arr, flat_ix )] = fa_id
+        self.mask_arr = mask_arr
+        plt.imshow(self.mask_arr, cmap = 'nipy_spectral')
+        plt.show()
 
-        for fa_id in master_dict:
-            for flat_ix in master_dict[fa_id] :
-                mask_arr[get_coords(arr, flat_ix )] = fa_id
+    def cFRET(self):
+        """
+        Given an input image, calculates the cFRET value for each pixel.
 
-        return mask_arr
+        The cFRET is defined as the FRET channel value, less the FRET expected
+        given the donor channel bleedthrough given the donor channel pixel
+        intensity, less the FRET expected given the acceptor channel
+        bleedthrough given the acceptor channel pixel intensity.
+
+        cFRET = FRET - dbt(I_donor) - abt(I_acceptor),
+        where FRET is the adjusted pixel intensity for the FRET channel,
+        dbt and abt are the spectral bleedthrough functions and I_donor,
+        I_acceptor are the adjusted intensity values for the donor and acceptor
+        channels.
+
+        Returns
+            cFRET (arr): greyscale array of cFRET values
+        """
+
+        work_img = self.adj_img
+
+        # split channels
+        fret = work_img[:,:,2].astype(float)
+        donor = work_img[:,:,0].astype(float)
+        acceptor = work_img[:,:,1].astype(float)
+
+        adj_donor = (donor*self.experiment.dbt[0]) - self.experiment.dbt[1]
+        adj_acceptor = (acceptor*self.experiment.abt[0]) - self.experiment.abt[1]
+
+        self.cFRET = np.clip(fret - adj_donor - adj_acceptor, a_min = 0, a_max = None)
 
 
-def get_coords(arr, flat_ix) :
-    """
-    Utility to retrive pixel cordinates from a flattened index id.
-    """
-    m, n = arr.shape
-    assert m == n , "Not set up for rectangle images"
-    i = flat_ix // m
-    j = flat_ix % m
-    return i, j
+    def calculate_fret_stats(self) :
+        """
+        Calculates the focal adhesion metrics per segment id in an image and
+        corresponding segment mask array.
+        """
+
+        tmp_df = self.experiment.initiate_fret_df()
+
+        mask_arr = self.mask_arr
+
+
+        # iterate through the segment ids
+        for fa in self.master_dict :
+            tmp_dict = {'img_url': self.fname,
+                        'exp_name:': self.experiment.experiment_name,
+                        'exp_parameter_url': self.experiment.exp_parameter_url,
+                        'FA_ID': int(fa),
+                        'area' : np.sum(mask_arr == fa),
+                        'mean_cFRET': np.mean(self.cFRET[mask_arr == fa]) }
+            tmp_df = tmp_df.append(pd.Series(tmp_dict), ignore_index=True)
+        print(tmp_df)
+
 
 if __name__ == '__main__' :
-    path_list = request_paths()
+    pass

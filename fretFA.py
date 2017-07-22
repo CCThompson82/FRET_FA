@@ -7,6 +7,7 @@ import os
 
 # 3rd party Dependencies
 from skimage import io, util
+import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -174,7 +175,15 @@ class Experiment(object) :
         """
         Stores a json with the experiment parameters.
         """
-        # TODO : actually write the json
+        json_path = os.path.join(self.data_path, str(self.experiment_name)+'.json')
+        par_dict = {'experiment': self.experiment_name,
+                    'kernel_size': self.b,
+                    'min_intensity_pc_threshold': self.th,
+                    'merger_threshold': self.merger_th,
+                    'min_segment_size': self.min_segment_size}
+
+        with open(json_path, 'w') as fp :
+            json.dump(par_dict, fp)
 
         return(os.path.join(self.data_path, str(self.experiment_name)+'.json'))
 
@@ -216,7 +225,7 @@ class SampleImage(object):
 
         # cFRET calcs
         self.cFRET()
-        self.calculate_fret_stats()
+        self.img_fret_df = self.calculate_fret_stats()
 
 
     def threshold_filter(self) :
@@ -497,7 +506,7 @@ class SampleImage(object):
                         'area' : np.sum(mask_arr == fa),
                         'mean_cFRET': np.mean(self.cFRET[mask_arr == fa]) }
             tmp_df = tmp_df.append(pd.Series(tmp_dict), ignore_index=True)
-        print(tmp_df)
+        return tmp_df
 
 
 if __name__ == '__main__' :

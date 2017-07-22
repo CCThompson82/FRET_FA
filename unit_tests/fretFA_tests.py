@@ -6,6 +6,7 @@ sys.path.append(ROOT_DIR)
 
 import unittest
 import numpy as np
+import json
 from skimage import io
 import matplotlib.pyplot as plt
 
@@ -145,6 +146,13 @@ class TestFretFA(unittest.TestCase) :
         axarr[1,0].imshow(f_img)
         axarr[1,1].imshow(mask_img, cmap = 'nipy_spectral')
         plt.show()
+
+    def test_write_json(self):
+        exp_return = {'experiment': 'test_experiment_00',
+                      'min_intensity_pc_threshold': 0.05, 'kernel_size': 10,
+                      'min_segment_size': 5, 'merger_threshold': 15}
+        with open(test_experiment.exp_parameter_url, 'r') as handle:
+            self.assertEqual(json.load(handle), exp_return)
 
 
 

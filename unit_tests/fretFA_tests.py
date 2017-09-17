@@ -150,9 +150,12 @@ class TestFretFA(unittest.TestCase) :
     def test_write_json(self):
         exp_return = {'experiment': 'test_experiment_00',
                       'min_intensity_pc_threshold': 0.05, 'kernel_size': 10,
-                      'min_segment_size': 5, 'merger_threshold': 15}
+                      'min_segment_size': 5, 'merger_threshold': 15,
+                      "FA_segmentation_threshold": 750.0}
         with open(test_experiment.exp_parameter_url, 'r') as handle:
-            self.assertEqual(json.load(handle), exp_return)
+            result = json.load(handle)
+            for idx in result :
+                self.assertEqual(result[idx], exp_return[idx])
 
 
 

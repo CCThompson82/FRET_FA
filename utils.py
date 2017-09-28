@@ -6,6 +6,7 @@ import os
 
 # deps
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def request_paths() :
@@ -144,3 +145,11 @@ def remove_maxouts(img) :
     MAX = (2**16) - 1
     adj_img[ img == MAX] = 0
     return adj_img
+
+def show_image(cFRET, title=''):
+    """
+    show image
+    """
+    plt.imshow(cFRET)
+    plt.title(title)
+    plt.show()

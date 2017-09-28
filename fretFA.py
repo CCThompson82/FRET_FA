@@ -13,6 +13,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from scipy.ndimage.filters import convolve
+import scipy.misc
+
 
 # local
 from utils import *
@@ -224,6 +226,19 @@ class SampleImage(object):
         self.fname = os.path.join(sample_path, filename)
         self.img = io.imread(self.fname)
 
+        # make paths
+        try:
+            os.makedirs(os.path.join('Results', 'mask', sample_path))
+        except :
+            pass
+        try:
+            os.makedirs(os.path.join('Results', 'cFRET', sample_path))
+        except:
+            pass
+
+        self.mask_url = os.path.join('Results', 'mask', self.fname)
+        self.cFRET_url = os.path.join('Results', 'cFRET', self.fname)
+
         self.adj_img = self.threshold_filter()
 
         # segmentation
@@ -233,6 +248,9 @@ class SampleImage(object):
         # cFRET calcs
         self.cFRET()
         self.img_fret_df = self.calculate_fret_stats()
+
+
+
 
 
     def threshold_filter(self) :
@@ -457,9 +475,10 @@ class SampleImage(object):
             for flat_ix in self.master_dict[fa_id] :
                 mask_arr[get_coords(f_arr, flat_ix )] = fa_id
         self.mask_arr = mask_arr
+        scipy.misc.toimage(mask_arr, cmin=0.0, cmax=3000).save(self.mask_url)
         if show :
             plt.imshow(self.mask_arr, cmap = 'nipy_spectral')
-            plt.set_title(self.sample_path)
+            plt.title(self.fname)
             plt.show()
 
     def cFRET(self):
@@ -491,7 +510,8 @@ class SampleImage(object):
         adj_donor = (donor*self.experiment.dbt[0]) - self.experiment.dbt[1]
         adj_acceptor = (acceptor*self.experiment.abt[0]) - self.experiment.abt[1]
 
-        self.cFRET = np.clip(fret - adj_donor - adj_acceptor, a_min = 0, a_max = None)
+        self.cFRET = np.clip(fret - adj_donor - adj_acceptor,  a_min = 0, a_max = None)
+        scipy.misc.toimage(self.cFRET, cmin=0.0, cmax=3000).save(self.cFRET_url)
 
 
     def calculate_fret_stats(self) :

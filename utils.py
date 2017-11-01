@@ -150,6 +150,6 @@ def show_image(cFRET, title=''):
     """
     show image
     """
-    plt.imshow(cFRET)
+    plt.imshow(cFRET, cmap = 'gray')
     plt.title(title)
     plt.show()

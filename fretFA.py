@@ -236,6 +236,7 @@ class SampleImage(object):
         except:
             pass
 
+
         self.mask_url = os.path.join('Results', 'mask', self.fname)
         self.cFRET_url = os.path.join('Results', 'cFRET', self.fname)
 
@@ -249,6 +250,15 @@ class SampleImage(object):
         self.cFRET()
         self.img_fret_df = self.calculate_fret_stats()
 
+        img_cfret = scipy.misc.imread(self.cFRET_url)
+        img_mask = scipy.misc.imread(self.mask_url)
+        f, axarr = plt.subplots(1,2,figsize=(8,4))
+        axarr[0].set_title('Focal Adhesions (binary mask)')
+        axarr[1].set_title('corrected FRET')
+        axarr[0].imshow(img_mask, cmap = 'gray')
+        axarr[1].imshow(img_cfret, cmap = 'gray')
+        plt.suptitle(self.fname)
+        plt.show()
 
 
 
@@ -464,7 +474,7 @@ class SampleImage(object):
             print("\n{} focal adhesions identified by waterfall segmentation.".format(len(master_dict)))
         self.master_dict = master_dict
 
-    def generate_mask(self, f_arr, show=False):
+    def generate_mask(self, f_arr):
         """
         Generates a mask from a segmentation dictionary for visualization
         purposes.
@@ -475,11 +485,8 @@ class SampleImage(object):
             for flat_ix in self.master_dict[fa_id] :
                 mask_arr[get_coords(f_arr, flat_ix )] = fa_id
         self.mask_arr = mask_arr
-        scipy.misc.toimage(mask_arr, cmin=0.0, cmax=3000).save(self.mask_url)
-        if show :
-            plt.imshow(self.mask_arr, cmap = 'nipy_spectral')
-            plt.title(self.fname)
-            plt.show()
+        scipy.misc.toimage(mask_arr, cmin=0.0, cmax=255.0).save(self.mask_url)
+
 
     def cFRET(self):
         """
@@ -511,7 +518,7 @@ class SampleImage(object):
         adj_acceptor = (acceptor*self.experiment.abt[0]) - self.experiment.abt[1]
 
         self.cFRET = np.clip(fret - adj_donor - adj_acceptor,  a_min = 0, a_max = None)
-        scipy.misc.toimage(self.cFRET, cmin=0.0, cmax=3000).save(self.cFRET_url)
+        scipy.misc.toimage(self.cFRET, cmin=0.0, cmax=1000).save(self.cFRET_url)
 
 
     def calculate_fret_stats(self) :

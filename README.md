@@ -7,13 +7,25 @@ using the system reported by [citation]().
 
 ## Dependencies
 
-## Set up
+## Installation
+
+cd into a directory of choice
+
+`git clone https://github.com/CCThompson82/FRET_FA.git`
+
 
 ## Data Requirements
 
 ## Instructions
 
+open terminal
+
+`cd FRET_FA`
+
+Change any parameters you like, including the experiment name in `run_experiment.py`
+
+`python run_experiment.py`
 
 ## TODO
 
-     [ ] check for channel order and fn to switch if needed 
+     [ ] check for channel order and fn to switch if needed

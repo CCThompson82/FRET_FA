@@ -518,7 +518,7 @@ class SampleImage(object):
         adj_acceptor = (acceptor*self.experiment.abt[0]) - self.experiment.abt[1]
 
         self.cFRET = np.clip(fret - adj_donor - adj_acceptor,  a_min = 0, a_max = None)
-        scipy.misc.toimage(self.cFRET, cmin=0.0, cmax=1000).save(self.cFRET_url)
+        scipy.misc.toimage(self.cFRET, cmin=0.0, cmax=2500).save(self.cFRET_url)
 
 
     def calculate_fret_stats(self) :
